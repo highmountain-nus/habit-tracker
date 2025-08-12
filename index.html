@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>習慣タイムトラッカー — 最終版</title>
+  <link rel="icon" href="data:;base64,iVBORw0KGgo=" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" defer></script>
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700&family=Dancing+Script:wght@700&display=swap" rel="stylesheet">
+  <style>
+    :root { --bg:#0b0f14; --card:#121826; --text:#e6edf7; --muted:#9fb0c6; --pink:#ff5ac8; --green:#22d3a6; --accent:#7c5cff; --line:#233; }
+    *{ box-sizing:border-box }
+    body{ margin:0; font-family: 'Zen Maru Gothic', system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; color:var(--text);
+      background: radial-gradient(1200px 800px at 20% -10%, rgba(124,92,255,.25), transparent),
+                  radial-gradient(800px 600px at 120% 20%, rgba(255,90,200,.2), transparent), var(--bg); }
+    header{ padding:16px 20px; border-bottom:1px solid var(--line); position:sticky; top:0; backdrop-filter:blur(6px); background:rgba(11,15,20,.75); z-index:5; }
+    header h1{ margin:0; font-size:18px; letter-spacing:.5px }
+    .wrap{ max-width:1100px; margin:0 auto; padding:18px }
+    .card{ background:linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,0)); border:1px solid var(--line); border-radius:16px; padding:16px; box-shadow:0 10px 30px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.04) }
+    .card h2{ margin:0 0 10px; font-size:16px; color:#cfe2ff; letter-spacing:.3px }
+    label{ display:block; font-size:12px; color:var(--muted); margin-bottom:6px }
+    input[type="text"], input[type="number"], select{ width:100%; padding:10px 12px; border-radius:12px; border:1px solid var(--line); background:#0f1523; color:var(--text) }
+    .row{ display:grid; gap:10px; grid-template-columns:1fr }
+    @media (min-width:640px){ .row.two{ grid-template-columns:1fr 1fr } .row.three{ grid-template-columns:1fr 1fr 1fr } }
+    button{ cursor:pointer; padding:10px 14px; border-radius:12px; border:1px solid var(--line); background:#121a2b; color:var(--text); transition:transform .02s ease, box-shadow .2s ease }
+    button:hover{ box-shadow:0 6px 20px rgba(124,92,255,.25) }
+    button:active{ transform:translateY(1px) }
+    .btn-primary{ background:linear-gradient(90deg, var(--accent), var(--pink)); border:none }
+    .btn-green{ background:linear-gradient(90deg, #1fbfb4, var(--green)); border:none }
+    .danger{ color:#ff6b6b }
+    .muted{ color:var(--muted); font-size:12px }
+    .table{ width:100%; border-collapse:collapse; font-size:12px }
+    .table th,.table td{ padding:8px; border-bottom:1px solid var(--line) }
+    canvas{ background:rgba(255,255,255,.02); border-radius:12px; padding:8px }
+    .small{ font-size:11px }
+    /* Tabs */
+    .tabs{ margin-top:8px; display:flex; gap:8px; flex-wrap:wrap }
+    .tab-btn{ cursor:pointer; padding:8px 12px; border-radius:999px; border:1px solid var(--line); background:#0f1523; color:var(--text) }
+    .tab-btn.active{ background:linear-gradient(90deg, var(--accent), var(--pink)); border:none }
+    .tab{ display:none }
+    .tab.active{ display:block }
+    .tag{ display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border:1px solid var(--line); border-radius:999px; background:#0f1523 }
+    .tag .dot{ width:10px; height:10px; border-radius:50% }
+    .habits{ display:flex; flex-wrap:wrap; gap:8px }
+    /* Home: quote */
+    .quote{ margin-top:10px; padding:12px 14px; border:1px dashed rgba(255,255,255,.15); border-radius:14px; background:linear-gradient(90deg, rgba(124,92,255,.12), rgba(34,211,166,.12)); }
+    .quote .text{ font-family:"Dancing Script", cursive; font-size:28px; line-height:1.2; letter-spacing:.3px }
+    .quote .author{ margin-top:6px; font-size:12px; color:#cfe2ff; opacity:.9 }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>習慣タイムトラッカー ⏱️</h1>
+    <nav class="tabs">
+      <button class="tab-btn active" data-tab="tab-home">ホーム</button>
+      <button class="tab-btn" data-tab="tab-habits">習慣</button>
+      <button class="tab-btn" data-tab="tab-log">記録</button>
+      <button class="tab-btn" data-tab="tab-timer">タイマー</button>
+      <button class="tab-btn" data-tab="tab-charts">グラフ</button>
+      <button class="tab-btn" data-tab="tab-data">データ</button>
+    </nav>
+  </header>
+
+  <div class="wrap">
+    <!-- ホーム：複利グラフ + 名言 -->
+    <section class="tab active" id="tab-home">
+      <section class="card">
+        <h2>複利の力（モチベーション）</h2>
+        <div class="row three">
+          <div>
+            <label>対象</label>
+            <select id="comp-habit"></select>
+          </div>
+          <div>
+            <label>1日の目標時間（分）= 1%</label>
+            <input id="comp-goal" type="number" min="1" step="1" placeholder="例：30" />
+          </div>
+          <div>
+            <label>期間</label>
+            <select id="comp-range">
+              <option value="30">直近30日</option>
+              <option value="90">直近90日</option>
+              <option value="365" selected>直近1年</option>
+              <option value="all">全期間</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+          <button class="btn-primary" onclick="renderCompounding()">複利グラフ更新</button>
+          <div class="muted small" id="comp-stats">—</div>
+        </div>
+        <div style="margin-top:12px">
+          <canvas id="compChart" height="180"></canvas>
+        </div>
+        <div class="quote" id="quoteBox" style="margin-top:14px;">
+          <div class="text" id="quoteText">""</div>
+          <div class="author" id="quoteAuthor"></div>
+        </div>
+        <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
+          <button onclick="shuffleQuote()">名言を更新</button>
+        </div>
+      </section>
+    </section>
+
+    <!-- 習慣タブ -->
+    <section class="tab" id="tab-habits">
+      <section class="card">
+        <h2>習慣の追加・管理</h2>
+        <div class="row two">
+          <div>
+            <label>習慣名</label>
+            <input id="habit-name" type="text" placeholder="例：英単語、読書、筋トレ" />
+          </div>
+          <div>
+            <label>色（任意）</label>
+            <input id="habit-color" type="text" placeholder="#ff5ac8 または red" />
+          </div>
+        </div>
+        <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn-primary" onclick="addHabit()">＋ 追加</button>
+          <button class="danger" onclick="resetAll()">全データ初期化</button>
+        </div>
+        <div style="margin-top:14px">
+          <div class="habits" id="habit-tags"></div>
+          <div class="muted small" style="margin-top:6px">ヒント：タグをクリックで選択、右クリックで削除。</div>
+        </div>
+      </section>
+    </section>
+
+    <!-- 記録タブ -->
+    <section class="tab" id="tab-log">
+      <section class="card">
+        <h2>手動で時間を記録</h2>
+        <div class="row two">
+          <div>
+            <label>習慣の選択</label>
+            <select id="habit-select"></select>
+          </div>
+          <div>
+            <label>取り組み時間（分）</label>
+            <input id="minutes" type="number" min="1" step="1" placeholder="例：25" />
+          </div>
+        </div>
+        <div class="row two" style="margin-top:10px;">
+          <div>
+            <label>任意の記録日時（未指定なら現在時刻）</label>
+            <input id="when" type="datetime-local" />
+          </div>
+          <div style="display:flex; align-items:end; gap:8px;">
+            <button class="btn-green" onclick="logTime()">📝 記録する</button>
+            <button onclick="clearToday()" title="今日の記録だけ消す">今日のみ削除</button>
+          </div>
+        </div>
+        <div style="margin-top:14px">
+          <table class="table" id="log-table">
+            <thead><tr><th>日時</th><th>習慣</th><th>分</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+
+    <!-- タイマータブ -->
+    <section class="tab" id="tab-timer">
+      <section class="card">
+        <h2>今やるタイマー（バックグラウンドOK）</h2>
+        <div class="row two">
+          <div>
+            <label>習慣の選択</label>
+            <select id="timer-habit"></select>
+          </div>
+          <div>
+            <label>メモ（任意）</label>
+            <input id="timer-note" type="text" placeholder="例：問題集#3" />
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px; margin-top:12px;">
+          <div id="timer-display" style="font-size:28px; font-variant-numeric: tabular-nums;">00:00:00</div>
+          <div class="muted small" id="timer-status">待機中</div>
+        </div>
+        <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+          <button class="btn-primary" id="btn-start" onclick="timerStart()">▶ 開始</button>
+          <button id="btn-pause" onclick="timerPause()" style="display:none;">⏸ 一時停止</button>
+          <button id="btn-resume" onclick="timerResume()" style="display:none;">↻ 再開</button>
+          <button class="danger" onclick="timerReset()">⟲ リセット</button>
+          <button class="btn-green" onclick="timerCommit()">📝 ログに追加</button>
+        </div>
+        <p class="muted small" style="margin-top:8px">
+          仕組み：タイマーは <b>開始時刻と現在時刻の差</b> で計算するため、
+          画面を閉じたり他アプリに切り替えても正確に進みます。対応端末では <i>Wake Lock API</i> で画面消灯防止も試みます。
+        </p>
+      </section>
+    </section>
+
+    <!-- グラフタブ -->
+    <section class="tab" id="tab-charts">
+      <section class="card">
+        <h2>可視化</h2>
+        <div class="row two">
+          <div>
+            <label>対象の習慣</label>
+            <select id="chart-habit"></select>
+          </div>
+          <div>
+            <label>期間</label>
+            <select id="range-select">
+              <option value="30">直近30日</option>
+              <option value="90">直近90日</option>
+              <option value="365" selected>直近1年</option>
+              <option value="all">全期間</option>
+            </select>
+          </div>
+        </div>
+        <div class="row three" style="margin-top:10px">
+          <button onclick="renderAllCharts()">グラフ更新</button>
+          <button onclick="toggleAvgMode()" id="avg-btn" title="日次→7日平均→30日平均 と切替">平均: 日次</button>
+        </div>
+        <div class="stack" style="margin-top:12px">
+          <div>
+            <div class="muted small">① 累計時間（選択した習慣）</div>
+            <canvas id="cumChart" height="120"></canvas>
+          </div>
+          <div>
+            <div class="muted small">② 日ごとの取り組み時間（平均モード切替可）</div>
+            <canvas id="dailyChart" height="160"></canvas>
+          </div>
+          <div>
+            <div class="muted small">③ 一日のどの時間帯にやっているか（0–23時）</div>
+            <canvas id="todChart" height="120"></canvas>
+          </div>
+          <div>
+            <div class="muted small">④ 項目バランス（100%帯グラフ／日）</div>
+            <canvas id="stackChart" height="160"></canvas>
+          </div>
+          <div>
+            <div class="muted small">⑤ 項目ごとの累計時間（円グラフ）</div>
+            <canvas id="pieChart" height="180"></canvas>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <!-- データタブ -->
+    <section class="tab" id="tab-data">
+      <section class="card">
+        <h2>データの書き出し／読み込み</h2>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button onclick="exportData()">データを書き出し</button>
+          <label class="tag" style="cursor:pointer">
+            <input id="import-file" type="file" accept=".json" style="display:none" onchange="importData(event)" />
+            <span onclick="document.getElementById('import-file').click()">JSONを読み込み</span>
+          </label>
+        </div>
+        <p class="muted small" style="margin-top:10px">データはこの端末のブラウザに保存（localStorage）されています。別端末へ移す場合はエクスポート→インポートしてください。</p>
+      </section>
+    </section>
+  </div>
+
+  <script>
+    // ====== 永続キー ======
+    const STORAGE_KEY = 'habit_tracker_v1';
+    const TIMER_KEY   = 'habit_tracker_timer_v1';
+    const GOAL_KEY    = 'habit_tracker_goal_minutes_v1';
+
+    // ====== ステート ======
+    let state = load();
+    function load(){ try{ return JSON.parse(localStorage.getItem(STORAGE_KEY)) || { habits:[], logs:[] }; } catch{ return { habits:[], logs:[] }; } }
+    function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+
+    // ====== Util ======
+    const uid = (p='') => p + Math.random().toString(36).slice(2,9);
+    const fmtDateTime = ts => new Date(ts).toLocaleString('ja-JP');
+    const ymd = ts => new Date(ts).toISOString().slice(0,10);
+    function randomColor(){ const hues=[300,210,160,40,0,120,260]; const h=hues[Math.floor(Math.random()*hues.length)]; return `hsl(${h} 90% 60%)`; }
+
+    // ====== タブ切替 ======
+    document.addEventListener('click', (e)=>{
+      const btn = e.target.closest('.tab-btn');
+      if(!btn) return;
+      document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      const id = btn.getAttribute('data-tab');
+      document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+      if(id==='tab-home') { renderCompounding(); }
+    });
+
+    // ====== 習慣 ======
+    function addHabit(){
+      const name = document.getElementById('habit-name').value.trim();
+      const color = document.getElementById('habit-color').value.trim() || randomColor();
+      if(!name) return alert('習慣名を入力してください');
+      state.habits.push({ id: uid('h_'), name, color }); save();
+      document.getElementById('habit-name').value=''; document.getElementById('habit-color').value='';
+      renderHabits(); populateSelects(); populateTimerSelect(); populateCompSelect(); renderAllCharts(); renderCompounding();
+    }
+    function removeHabit(id){
+      if(!confirm('この習慣と関連ログを削除します。よろしいですか？')) return;
+      state.logs = state.logs.filter(l=>l.habitId!==id);
+      state.habits = state.habits.filter(h=>h.id!==id); save();
+      renderHabits(); populateSelects(); populateTimerSelect(); populateCompSelect(); renderAllCharts(); renderCompounding();
+    }
+    function renderHabits(){
+      const box = document.getElementById('habit-tags'); if(!box) return; box.innerHTML='';
+      state.habits.forEach(h=>{
+        const tag = document.createElement('div'); tag.className='tag';
+        tag.innerHTML = `<span class="dot" style="background:${h.color}"></span><span>${h.name}</span>`;
+        tag.title='クリックで選択 / 右クリックで削除';
+        tag.onclick=()=>{ const s1=document.getElementById('habit-select'); const s2=document.getElementById('chart-habit'); const s3=document.getElementById('comp-habit'); if(s1) s1.value=h.id; if(s2) s2.value=h.id; if(s3) s3.value=h.id; renderAllCharts(); renderCompounding(); };
+        tag.oncontextmenu=(e)=>{ e.preventDefault(); removeHabit(h.id); };
+        box.appendChild(tag);
+      });
+    }
+    function populateSelects(){
+      const sel1=document.getElementById('habit-select'); const sel2=document.getElementById('chart-habit'); if(!sel1||!sel2) return;
+      sel1.innerHTML=''; sel2.innerHTML=''; sel2.add(new Option('（全体集計/一部グラフのみ）','all'));
+      state.habits.forEach(h=>{ sel1.add(new Option(h.name,h.id)); sel2.add(new Option(h.name,h.id)); });
+    }
+
+    // ====== 記録 ======
+    function logTime(){
+      const habitId = document.getElementById('habit-select').value || state.habits[0]?.id;
+      const minutes = parseInt(document.getElementById('minutes').value,10);
+      const when = document.getElementById('when').value;
+      if(!habitId) return alert('先に習慣を追加してください');
+      if(!(minutes>0)) return alert('分数は1以上の整数で');
+      const ts = when ? new Date(when).getTime() : Date.now();
+      state.logs.unshift({ id: uid('l_'), habitId, minutes, ts }); save();
+      document.getElementById('minutes').value=''; document.getElementById('when').value='';
+      renderLogTable(); renderAllCharts(); renderCompounding();
+    }
+    function deleteLog(id){ state.logs = state.logs.filter(l=>l.id!==id); save(); renderLogTable(); renderAllCharts(); renderCompounding(); }
+    function clearToday(){ const today=ymd(Date.now()); state.logs = state.logs.filter(l=>ymd(l.ts)!==today); save(); renderLogTable(); renderAllCharts(); renderCompounding(); }
+    function renderLogTable(){
+      const tbody=document.querySelector('#log-table tbody'); if(!tbody) return; tbody.innerHTML='';
+      state.logs.slice(0,200).forEach(l=>{ const h=state.habits.find(h=>h.id===l.habitId); const tr=document.createElement('tr');
+        tr.innerHTML=`<td>${fmtDateTime(l.ts)}</td><td>${h?h.name:'—'}</td><td>${l.minutes}</td><td><button onclick="deleteLog('${l.id}')">削除</button></td>`; tbody.appendChild(tr); });
+    }
+
+    // ====== 集計/グラフ ======
+    function dateRange(days){ const end=new Date(); end.setHours(23,59,59,999); const start=new Date(days==='all'?0:Date.now()-days*86400000); start.setHours(0,0,0,0); return [start.getTime(), end.getTime()]; }
+    function filterLogsByRange(range){ const [s,e]=dateRange(range); return state.logs.filter(l=>l.ts>=s && l.ts<=e); }
+    function daysBetween(a,b){ const d=86400000; const A=new Date(a); A.setHours(0,0,0,0); const B=new Date(b); B.setHours(0,0,0,0); return Math.round((B-A)/d)+1; }
+    function buildDayAxis(range){ const [s,e]=dateRange(range); const n=daysBetween(s,e); const out=[]; for(let i=0;i<n;i++){ out.push(new Date(s+i*86400000).toISOString().slice(0,10)); } return out; }
+    function timeOfDayHistogram(logs, habitId){ const bins=new Array(24).fill(0); logs.filter(l=>habitId==='all'?true:l.habitId===habitId).forEach(l=>{ bins[new Date(l.ts).getHours()]+=l.minutes; }); return bins; }
+    function sumByHabit(logs){ const m=new Map(); logs.forEach(l=>m.set(l.habitId,(m.get(l.habitId)||0)+l.minutes)); return m; }
+    function movingAverage(seq,w){ if(w<=1) return seq.slice(); const out=[]; for(let i=0;i<seq.length;i++){ const s=Math.max(0,i-w+1); let sum=0,c=0; for(let j=s;j<=i;j++){ sum+=seq[j]; c++; } out.push(sum/c); } return out; }
+
+    let charts={ comp:null, cum:null, daily:null, tod:null, stack:null, pie:null }; let avgMode=1;
+    function destroyChart(k){ if(charts[k]){ charts[k].destroy(); charts[k]=null; } }
+    function chartColors(){ return state.habits.map(h=>h.color); }
+
+    function baseOptions(unit, beginAtZero=false){ return { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{ color:'#cfe2ff' } }, tooltip:{ callbacks:{ label:(ctx)=>{ const v=ctx.parsed.y ?? ctx.parsed; return `${ctx.dataset.label||''} ${Math.round(v)} ${unit}`; } } } }, scales:{ x:{ ticks:{ color:'#cfe2ff', maxRotation:0 }, grid:{ color:'rgba(255,255,255,.05)' } }, y:{ beginAtZero, ticks:{ color:'#cfe2ff' }, grid:{ color:'rgba(255,255,255,.06)' } } } }; }
+
+    function renderCum(){
+      const habitId = document.getElementById('chart-habit').value || state.habits[0]?.id; const range=document.getElementById('range-select').value;
+      const logs = filterLogsByRange(range).filter(l=>habitId==='all'?true:l.habitId===habitId);
+      const axis = buildDayAxis(range); const perDay = new Map(axis.map(d=>[d,0]));
+      logs.forEach(l=>{ const d=new Date(l.ts).toISOString().slice(0,10); if(perDay.has(d)) perDay.set(d, perDay.get(d)+l.minutes); });
+      let cum=0; const series=axis.map(d=>cum += (perDay.get(d)||0));
+      destroyChart('cum'); charts.cum=new Chart(document.getElementById('cumChart').getContext('2d'),{ type:'line', data:{ labels:axis, datasets:[{ label:'累計（分）', data:series, borderWidth:2, fill:false, tension:.25 }] }, options: baseOptions('分') });
+    }
+    function renderDaily(){
+      const habitId=document.getElementById('chart-habit').value || state.habits[0]?.id; const range=document.getElementById('range-select').value;
+      const logs=filterLogsByRange(range); const axis=buildDayAxis(range); const map=new Map(axis.map(d=>[d,0]));
+      logs.filter(l=>habitId==='all'?true:l.habitId===habitId).forEach(l=>{ const d=new Date(l.ts).toISOString().slice(0,10); if(map.has(d)) map.set(d,(map.get(d)||0)+l.minutes); });
+      let series=axis.map(d=>map.get(d)||0); if(avgMode!==1) series=movingAverage(series,avgMode);
+      destroyChart('daily'); charts.daily=new Chart(document.getElementById('dailyChart').getContext('2d'),{ type:'bar', data:{ labels:axis, datasets:[{ label:(avgMode===1?'日ごと': avgMode+'日平均')+'（分）', data:series }] }, options: baseOptions('分', true) });
+    }
+    function renderTOD(){ const habitId=document.getElementById('chart-habit').value || state.habits[0]?.id; const range=document.getElementById('range-select').value; const bins=timeOfDayHistogram(filterLogsByRange(range), habitId); destroyChart('tod'); charts.tod=new Chart(document.getElementById('todChart').getContext('2d'),{ type:'bar', data:{ labels:[...Array(24).keys()].map(h=>h+'時'), datasets:[{ label:'時間帯別（分）', data:bins }] }, options: baseOptions('分', true) }); }
+    function renderStack(){ const range=document.getElementById('range-select').value; const axis=buildDayAxis(range); const logs=filterLogsByRange(range); const byDay=new Map(axis.map(d=>[d,new Map()]));
+      logs.forEach(l=>{ const d=new Date(l.ts).toISOString().slice(0,10); if(byDay.has(d)){ const m=byDay.get(d); m.set(l.habitId,(m.get(l.habitId)||0)+l.minutes); } }); const totals=axis.map(d=>Array.from(byDay.get(d).values()).reduce((a,b)=>a+b,0));
+      const datasets=state.habits.map(h=>({ label:h.name, data: axis.map((d,i)=>{ const x=byDay.get(d).get(h.id)||0; const t=totals[i]||1; return (x/t)*100; }), stack:'stack', backgroundColor:h.color }));
+      destroyChart('stack'); charts.stack=new Chart(document.getElementById('stackChart').getContext('2d'),{ type:'bar', data:{ labels:axis, datasets }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'top', labels:{ color:'#cfe2ff' } }, tooltip:{ mode:'index', intersect:false } }, scales:{ x:{ stacked:true, ticks:{ color:'#cfe2ff', maxRotation:0 }, grid:{ color:'rgba(255,255,255,.05)' } }, y:{ stacked:true, min:0, max:100, ticks:{ color:'#cfe2ff', callback:v=>v+'%' }, grid:{ color:'rgba(255,255,255,.06)' } } } } }); }
+    function renderPie(){ const range=document.getElementById('range-select').value; const logs=filterLogsByRange(range); const sums=sumByHabit(logs); const labels=state.habits.map(h=>h.name); const data=state.habits.map(h=>sums.get(h.id)||0); destroyChart('pie'); charts.pie=new Chart(document.getElementById('pieChart').getContext('2d'),{ type:'pie', data:{ labels, datasets:[{ data, backgroundColor: chartColors() }] }, options: baseOptions('分') }); }
+    function renderAllCharts(){ renderCum(); renderDaily(); renderTOD(); renderStack(); renderPie(); }
+
+    // ====== ホーム：複利グラフ ======
+    function populateCompSelect(){
+      const sel=document.getElementById('comp-habit'); if(!sel) return; sel.innerHTML='';
+      sel.add(new Option('全体（すべての習慣）','all'));
+      state.habits.forEach(h=> sel.add(new Option(h.name, h.id)));
+    }
+    function buildDailyMap(range){
+      const axis = buildDayAxis(range);
+      const byDay = new Map(axis.map(d=>[d, new Map()]));
+      const logs = filterLogsByRange(range);
+      logs.forEach(l=>{ const d=new Date(l.ts).toISOString().slice(0,10); if(byDay.has(d)){ const m=byDay.get(d); m.set(l.habitId,(m.get(l.habitId)||0)+l.minutes); }});
+      return { axis, byDay };
+    }
+    function compSeries(range, habitId, goal){
+      const {axis, byDay} = buildDailyMap(range);
+      if(axis.length===0) return {axis:[], real:[], ideal:[]};
+      goal = Math.max(1, Number(goal||0));
+      let mult = 1.0; // 初期倍率
+      const real=[]; const ideal=[]; let idealMult=1.0;
+      axis.forEach(d=>{
+        let minutes=0;
+        if(habitId==='all'){ byDay.get(d).forEach(v=> minutes+=v); }
+        else { minutes = byDay.get(d).get(habitId)||0; }
+        const rate = (minutes/goal) * 0.01; // 目標=1%
+        mult *= (1 + rate);
+        idealMult *= 1.01; // 理想：毎日ちょうど1%
+        real.push(mult);
+        ideal.push(idealMult);
+      });
+      return { axis, real, ideal };
+    }
+    function renderCompounding(){
+      const habitId = document.getElementById('comp-habit').value || 'all';
+      const range   = document.getElementById('comp-range').value || '365';
+      const goal    = Number(document.getElementById('comp-goal').value) || Number(localStorage.getItem(GOAL_KEY)) || 30;
+      document.getElementById('comp-goal').value = goal;
+      localStorage.setItem(GOAL_KEY, String(goal));
+      const {axis, real, ideal} = compSeries(range, habitId, goal);
+      const statBox = document.getElementById('comp-stats');
+      if(axis.length===0){ statBox.textContent='記録がありません'; destroyChart('comp'); return; }
+      statBox.textContent = `開始倍率1.00 → 現在 ${real[real.length-1].toFixed(3)} 倍（理想 ${ideal[ideal.length-1].toFixed(3)} 倍）`;
+      destroyChart('comp');
+      charts.comp = new Chart(document.getElementById('compChart').getContext('2d'), {
+        type:'line',
+        data:{ labels:axis, datasets:[
+          { label:'実績（倍率）', data:real, borderWidth:2, fill:false, tension:.25 },
+          { label:'理想 1%/日', data:ideal, borderDash:[6,6], borderWidth:2, fill:false, tension:.25 }
+        ]},
+        options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{ color:'#cfe2ff' } }, tooltip:{ callbacks:{ label:(ctx)=>`${ctx.dataset.label}: ${ctx.parsed.y.toFixed(3)} 倍` } } }, scales:{ x:{ ticks:{ color:'#cfe2ff', maxRotation:0 }, grid:{ color:'rgba(255,255,255,.05)' } }, y:{ beginAtZero:false, ticks:{ color:'#cfe2ff' }, grid:{ color:'rgba(255,255,255,.06)' } } } }
+      });
+    }
+
+    // ====== 名言（ランダム） ======
+    const QUOTES = [
+      { t:'毎日1%の進歩が、1年後には37倍の成長を生む。', a:'ジェームズ・クリア' },
+      { t:'継続は力なり。', a:'日本のことわざ' },
+      { t:'継続こそが天才を作る。', a:'レオナルド・ダ・ヴィンチ' },
+      { t:'複利は人類最大の発明だ。', a:'アルベルト・アインシュタイン' },
+      { t:'何ごとをなすにも時というものがある。いかに望もうと、春が来なければ桜は咲かぬ。いかにあせろうと、時期が来なければ事は成就せぬ。', a:'松下幸之助' },
+      { t:'毎日の小さな努力のつみ重ねが、歴史を作っていくんだよ。', a:'ドラえもん' },
+      { t:"No, I don’t ever give up. I’d have to be dead or completely incapacitated.", a:'Elon Musk' }
+    ];
+    function shuffleQuote(){
+      const q = QUOTES[Math.floor(Math.random()*QUOTES.length)];
+      document.getElementById('quoteText').textContent = `“${q.t}”`;
+      document.getElementById('quoteAuthor').textContent = `— ${q.a}`;
+    }
+
+    // ====== データ I/O ======
+    function exportData(){ const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='habit_data.json'; a.click(); URL.revokeObjectURL(url); }
+    function importData(e){ const file=e.target.files[0]; if(!file) return; const r=new FileReader(); r.onload=()=>{ try{ const data=JSON.parse(r.result); if(!data||!Array.isArray(data.habits)||!Array.isArray(data.logs)) throw new Error('形式が不正'); state=data; save(); renderHabits(); populateSelects(); populateTimerSelect(); populateCompSelect(); renderLogTable(); renderAllCharts(); renderCompounding(); } catch(err){ alert('読み込み失敗: '+err.message); } }; r.readAsText(file,'utf-8'); e.target.value=''; }
+    function resetAll(){ if(!confirm('ローカルの全データを削除します。続行しますか？')) return; state={ habits:[], logs:[] }; save(); renderHabits(); populateSelects(); populateTimerSelect(); populateCompSelect(); renderLogTable(); renderAllCharts(); renderCompounding(); }
+
+    // ====== タイマー（バックグラウンド耐性） ======
+    let timer = loadTimer(); let tickHandle=null; let wakeLock=null;
+    function loadTimer(){ try{ return JSON.parse(localStorage.getItem(TIMER_KEY)) || { running:false, habitId:null, startTs:0, accMs:0, note:'' }; } catch{ return { running:false, habitId:null, startTs:0, accMs:0, note:'' }; } }
+    function saveTimer(){ localStorage.setItem(TIMER_KEY, JSON.stringify(timer)); }
+    function fmtHMS(ms){ const s=Math.floor(ms/1000); const hh=String(Math.floor(s/3600)).padStart(2,'0'); const mm=String(Math.floor((s%3600)/60)).padStart(2,'0'); const ss=String(s%60).padStart(2,'0'); return `${hh}:${mm}:${ss}`; }
+    function timerNowMs(){ return timer.running ? (timer.accMs + (Date.now()-timer.startTs)) : timer.accMs; }
+    function updateTimerUI(){ const disp=document.getElementById('timer-display'); const status=document.getElementById('timer-status'); const bP=document.getElementById('btn-pause'); const bR=document.getElementById('btn-resume'); if(!disp) return; disp.textContent=fmtHMS(timerNowMs()); status.textContent=timer.running ? '計測中' : (timer.accMs>0 ? '一時停止中' : '待機中'); if(bP) bP.style.display = timer.running? '':'none'; if(bR) bR.style.display = (!timer.running && timer.accMs>0)? '': 'none'; const sel=document.getElementById('timer-habit'); if(sel){ sel.innerHTML=''; state.habits.forEach(h=> sel.add(new Option(h.name,h.id))); if(timer.habitId) sel.value=timer.habitId; }
+    }
+    function startTick(){ if(tickHandle) return; tickHandle=setInterval(updateTimerUI,1000); }
+    async function requestWakeLock(){ try{ if('wakeLock' in navigator){ if(wakeLock) return; wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', ()=>{ wakeLock=null; }); } } catch(_){} }
+    document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible' && timer.running){ requestWakeLock(); } updateTimerUI(); });
+
+    function timerStart(){ const sel=document.getElementById('timer-habit'); const note=document.getElementById('timer-note').value.trim(); const habitId= sel?.value || state.habits[0]?.id; if(!habitId) return alert('先に習慣を追加してください'); timer={ running:true, habitId, startTs:Date.now(), accMs:0, note }; saveTimer(); requestWakeLock(); startTick(); updateTimerUI(); }
+    function timerPause(){ if(!timer.running) return; timer.accMs += Date.now()-timer.startTs; timer.running=false; saveTimer(); updateTimerUI(); }
+    function timerResume(){ if(timer.running) return; timer.startTs=Date.now(); timer.running=true; saveTimer(); requestWakeLock(); updateTimerUI(); }
+    function timerReset(){ timer={ running:false, habitId: state.habits[0]?.id || null, startTs:0, accMs:0, note:'' }; saveTimer(); updateTimerUI(); }
+    function timerCommit(){ const ms=timerNowMs(); const minutes=Math.max(1, Math.round(ms/60000)); if(!(minutes>0) || !timer.habitId) return alert('計測データがありません'); state.logs.unshift({ id:uid('l_'), habitId:timer.habitId, minutes, ts:Date.now(), note: timer.note||undefined }); save(); timerReset(); renderLogTable(); renderAllCharts(); renderCompounding(); alert('ログに追加しました（'+minutes+'分）'); }
+
+    // ====== 初期化 ======
+    function populateTimerSelect(){ const sel=document.getElementById('timer-habit'); if(!sel) return; sel.innerHTML=''; state.habits.forEach(h=> sel.add(new Option(h.name,h.id))); if(timer.habitId){ sel.value=timer.habitId; } }
+
+    function baseInit(){
+      // セレクト類
+      renderHabits(); populateSelects(); populateTimerSelect(); populateCompSelect();
+      // デフォルト選択
+      if(state.habits[0]){
+        const s1=document.getElementById('habit-select'); const s2=document.getElementById('chart-habit'); const s3=document.getElementById('comp-habit');
+        if(s1) s1.value=state.habits[0].id; if(s2) s2.value=state.habits[0].id; if(s3) s3.value='all';
+      }
+      // 目標時間（保持）
+      const savedGoal = Number(localStorage.getItem(GOAL_KEY)||0) || 30; document.getElementById('comp-goal').value = savedGoal;
+      // 表やグラフ
+      renderLogTable(); renderAllCharts(); shuffleQuote(); renderCompounding();
+      // タイマーUI
+      updateTimerUI(); startTick();
+    }
+
+    baseInit();
+  </script>
+</body>
+</html>
