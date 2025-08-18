@@ -46,6 +46,17 @@
     .quote{ margin-top:10px; padding:12px 14px; border:1px dashed rgba(255,255,255,.15); border-radius:14px; background:linear-gradient(90deg, rgba(124,92,255,.12), rgba(34,211,166,.12)); }
     .quote .text{ font-family:"Dancing Script", cursive; font-size:28px; line-height:1.2; letter-spacing:.3px }
     .quote .author{ margin-top:6px; font-size:12px; color:#cfe2ff; opacity:.9 }
+    /* グラフの無限伸長対策：キャンバス固定高さ＆ブロック化 */
+    canvas{ background:rgba(255,255,255,.02); border-radius:12px; padding:8px; display:block }
+    #compChart{height:200px!important}
+    #cumChart{height:140px!important}
+    #dailyChart{height:180px!important}
+    #todChart{height:140px!important}
+    #stackChart{height:180px!important}
+    #pieChart{height:200px!important}
+    .tag{ position:relative }
+.tag .close{$1; z-index:10; touch-action:manipulation; -webkit-tap-highlight-color: transparent; }
+
   </style>
 </head>
 <body>
@@ -96,10 +107,7 @@
           <div class="text" id="quoteText">""</div>
           <div class="author" id="quoteAuthor"></div>
         </div>
-        <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
-          <button onclick="shuffleQuote()">名言を更新</button>
-        </div>
-      </section>
+        </section>
     </section>
 
     <!-- 習慣タブ -->
@@ -112,8 +120,20 @@
             <input id="habit-name" type="text" placeholder="例：英単語、読書、筋トレ" />
           </div>
           <div>
-            <label>色（任意）</label>
-            <input id="habit-color" type="text" placeholder="#ff5ac8 または red" />
+            <label>色</label>
+<div style="display:flex; gap:8px; align-items:center;">
+  <select id="habit-color-select">
+    <option value="#ff5ac8">ピンク</option>
+    <option value="#7c5cff">バイオレット</option>
+    <option value="#22d3a6">グリーン</option>
+    <option value="#33a1ff">ブルー</option>
+    <option value="#ffa500">オレンジ</option>
+    <option value="#e74c3c">レッド</option>
+    <option value="custom">カスタム...</option>
+  </select>
+  <input id="habit-color-picker" type="color" value="#ff5ac8" style="display:none;">
+</div>
+
           </div>
         </div>
         <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
@@ -282,18 +302,29 @@
       const id = btn.getAttribute('data-tab');
       document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
       document.getElementById(id).classList.add('active');
-      if(id==='tab-home') { renderCompounding(); }
+      if(id==='tab-home'){ renderCompounding(); }
+      if(id==='tab-charts'){ renderAllCharts(); }
     });
 
     // ====== 習慣 ======
     function addHabit(){
-      const name = document.getElementById('habit-name').value.trim();
-      const color = document.getElementById('habit-color').value.trim() || randomColor();
-      if(!name) return alert('習慣名を入力してください');
-      state.habits.push({ id: uid('h_'), name, color }); save();
-      document.getElementById('habit-name').value=''; document.getElementById('habit-color').value='';
-      renderHabits(); populateSelects(); populateTimerSelect(); populateCompSelect(); renderAllCharts(); renderCompounding();
-    }
+  const name = document.getElementById('habit-name').value.trim();
+  const sel  = document.getElementById('habit-color-select');
+  const pic  = document.getElementById('habit-color-picker');
+  const color = (sel?.value === 'custom' ? pic?.value : sel?.value) || randomColor();
+  if(!name) return alert('習慣名を入力してください');
+
+  state.habits.push({ id: uid('h_'), name, color }); save();
+
+  document.getElementById('habit-name').value='';
+  if(sel){ sel.value = '#ff5ac8'; }
+  if(pic){ pic.value = '#ff5ac8'; pic.style.display='none'; }
+
+  renderHabits(); populateSelects(); populateTimerSelect(); populateCompSelect();
+  renderAllCharts(); renderCompounding();
+}
+
+    function removeHabitHandler(e,id){ if(e&&e.stopPropagation) e.stopPropagation(); removeHabit(id); }
     function removeHabit(id){
       if(!confirm('この習慣と関連ログを削除します。よろしいですか？')) return;
       state.logs = state.logs.filter(l=>l.habitId!==id);
@@ -304,7 +335,8 @@
       const box = document.getElementById('habit-tags'); if(!box) return; box.innerHTML='';
       state.habits.forEach(h=>{
         const tag = document.createElement('div'); tag.className='tag';
-        tag.innerHTML = `<span class="dot" style="background:${h.color}"></span><span>${h.name}</span>`;
+        tag.innerHTML = `<button class="close" aria-label="削除" onclick="removeHabitHandler(event,'${h.id}')">×</button><span class="dot" style="background:${h.color}"></span><span>${h.name}</span>`;
+
         tag.title='クリックで選択 / 右クリックで削除';
         tag.onclick=()=>{ const s1=document.getElementById('habit-select'); const s2=document.getElementById('chart-habit'); const s3=document.getElementById('comp-habit'); if(s1) s1.value=h.id; if(s2) s2.value=h.id; if(s3) s3.value=h.id; renderAllCharts(); renderCompounding(); };
         tag.oncontextmenu=(e)=>{ e.preventDefault(); removeHabit(h.id); };
@@ -470,6 +502,14 @@
     function populateTimerSelect(){ const sel=document.getElementById('timer-habit'); if(!sel) return; sel.innerHTML=''; state.habits.forEach(h=> sel.add(new Option(h.name,h.id))); if(timer.habitId){ sel.value=timer.habitId; } }
 
     function baseInit(){
+      const _sel=document.getElementById('habit-color-select');
+const _pic=document.getElementById('habit-color-picker');
+if(_sel && _pic){
+  const sync = ()=>{ _pic.style.display = (_sel.value==='custom') ? 'inline-block' : 'none'; };
+  _sel.addEventListener('change', sync);
+  sync();
+}
+
       // セレクト類
       renderHabits(); populateSelects(); populateTimerSelect(); populateCompSelect();
       // デフォルト選択
@@ -484,8 +524,15 @@
       // タイマーUI
       updateTimerUI(); startTick();
     }
-
-    baseInit();
+    // Chart.js(外部, defer) の実行順により先にこちらが動くとエラーになるため待つ
+    (function waitForChart(){
+      if (window.Chart && typeof Chart === 'function') {
+        try { baseInit(); } catch (e) { console.error(e); }
+      } else {
+        setTimeout(waitForChart, 50);
+      }
+    })();
   </script>
 </body>
 </html>
+
