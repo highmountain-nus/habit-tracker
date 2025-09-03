@@ -486,8 +486,25 @@
     function saveTimer(){ localStorage.setItem(TIMER_KEY, JSON.stringify(timer)); }
     function fmtHMS(ms){ const s=Math.floor(ms/1000); const hh=String(Math.floor(s/3600)).padStart(2,'0'); const mm=String(Math.floor((s%3600)/60)).padStart(2,'0'); const ss=String(s%60).padStart(2,'0'); return `${hh}:${mm}:${ss}`; }
     function timerNowMs(){ return timer.running ? (timer.accMs + (Date.now()-timer.startTs)) : timer.accMs; }
-    function updateTimerUI(){ const disp=document.getElementById('timer-display'); const status=document.getElementById('timer-status'); const bP=document.getElementById('btn-pause'); const bR=document.getElementById('btn-resume'); if(!disp) return; disp.textContent=fmtHMS(timerNowMs()); status.textContent=timer.running ? '計測中' : (timer.accMs>0 ? '一時停止中' : '待機中'); if(bP) bP.style.display = timer.running? '':'none'; if(bR) bR.style.display = (!timer.running && timer.accMs>0)? '': 'none'; const sel=document.getElementById('timer-habit'); if(sel){ sel.innerHTML=''; state.habits.forEach(h=> sel.add(new Option(h.name,h.id))); if(timer.habitId) sel.value=timer.habitId; }
-    }
+    function updateTimerUI(){
+  const disp=document.getElementById('timer-display');
+  const status=document.getElementById('timer-status');
+  const bP=document.getElementById('btn-pause');
+  const bR=document.getElementById('btn-resume');
+  if(!disp) return;
+
+  disp.textContent=fmtHMS(timerNowMs());
+  status.textContent=timer.running ? '計測中' : (timer.accMs>0 ? '一時停止中' : '待機中');
+  if(bP) bP.style.display = timer.running? '':'none';
+  if(bR) bR.style.display = (!timer.running && timer.accMs>0)? '': 'none';
+
+  // ★ セレクトの「再生成」はしない。選択状態の反映だけにする
+  const sel=document.getElementById('timer-habit');
+  if(sel && timer.habitId){
+    sel.value = timer.habitId;
+  }
+}
+
     function startTick(){ if(tickHandle) return; tickHandle=setInterval(updateTimerUI,1000); }
     async function requestWakeLock(){ try{ if('wakeLock' in navigator){ if(wakeLock) return; wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', ()=>{ wakeLock=null; }); } } catch(_){} }
     document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible' && timer.running){ requestWakeLock(); } updateTimerUI(); });
@@ -499,31 +516,69 @@
     function timerCommit(){ const ms=timerNowMs(); const minutes=Math.max(1, Math.round(ms/60000)); if(!(minutes>0) || !timer.habitId) return alert('計測データがありません'); state.logs.unshift({ id:uid('l_'), habitId:timer.habitId, minutes, ts:Date.now(), note: timer.note||undefined }); save(); timerReset(); renderLogTable(); renderAllCharts(); renderCompounding(); alert('ログに追加しました（'+minutes+'分）'); }
 
     // ====== 初期化 ======
-    function populateTimerSelect(){ const sel=document.getElementById('timer-habit'); if(!sel) return; sel.innerHTML=''; state.habits.forEach(h=> sel.add(new Option(h.name,h.id))); if(timer.habitId){ sel.value=timer.habitId; } }
+   function populateTimerSelect(){
+  const sel = document.getElementById('timer-habit');
+  if(!sel) return;
 
-    function baseInit(){
-      const _sel=document.getElementById('habit-color-select');
-const _pic=document.getElementById('habit-color-picker');
-if(_sel && _pic){
-  const sync = ()=>{ _pic.style.display = (_sel.value==='custom') ? 'inline-block' : 'none'; };
-  _sel.addEventListener('change', sync);
-  sync();
+  sel.innerHTML = '';
+  state.habits.forEach(h => sel.add(new Option(h.name, h.id)));
+
+  if (timer.habitId && [...sel.options].some(o => o.value === timer.habitId)) {
+    sel.value = timer.habitId;
+  } else if (sel.options.length) {
+    sel.value = sel.options[0].value;
+    timer.habitId = sel.value;
+    saveTimer();
+  }
 }
 
-      // セレクト類
-      renderHabits(); populateSelects(); populateTimerSelect(); populateCompSelect();
-      // デフォルト選択
-      if(state.habits[0]){
-        const s1=document.getElementById('habit-select'); const s2=document.getElementById('chart-habit'); const s3=document.getElementById('comp-habit');
-        if(s1) s1.value=state.habits[0].id; if(s2) s2.value=state.habits[0].id; if(s3) s3.value='all';
-      }
-      // 目標時間（保持）
-      const savedGoal = Number(localStorage.getItem(GOAL_KEY)||0) || 30; document.getElementById('comp-goal').value = savedGoal;
-      // 表やグラフ
-      renderLogTable(); renderAllCharts(); shuffleQuote(); renderCompounding();
-      // タイマーUI
-      updateTimerUI(); startTick();
-    }
+
+
+    function baseInit(){
+  const _sel = document.getElementById('habit-color-select');
+  const _pic = document.getElementById('habit-color-picker');
+  if(_sel && _pic){
+    const sync = ()=>{ _pic.style.display = (_sel.value==='custom') ? 'inline-block' : 'none'; };
+    _sel.addEventListener('change', sync);
+    sync();
+  }
+
+  renderHabits();
+  populateSelects();
+  populateTimerSelect();
+  populateCompSelect();
+
+  const th = document.getElementById('timer-habit');
+  if (th) {
+    th.addEventListener('change', () => {
+      timer.habitId = th.value || null;
+      saveTimer();
+    });
+  }
+
+  if(state.habits[0]){
+    const s1=document.getElementById('habit-select');
+    const s2=document.getElementById('chart-habit');
+    const s3=document.getElementById('comp-habit');
+    if(s1) s1.value=state.habits[0].id;
+    if(s2) s2.value=state.habits[0].id;
+    if(s3) s3.value='all';
+  }
+
+  const savedGoal = Number(localStorage.getItem(GOAL_KEY)||0) || 30;
+  document.getElementById('comp-goal').value = savedGoal;
+
+  renderLogTable();
+  renderAllCharts();
+  shuffleQuote();
+  renderCompounding();
+
+  updateTimerUI();
+  startTick();
+}
+
+
+      
     // Chart.js(外部, defer) の実行順により先にこちらが動くとエラーになるため待つ
     (function waitForChart(){
       if (window.Chart && typeof Chart === 'function') {
@@ -535,5 +590,7 @@ if(_sel && _pic){
   </script>
 </body>
 </html>
+
+
 
 
